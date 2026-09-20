@@ -2,9 +2,9 @@
 setlocal
 cd /d "%~dp0"
 
-echo ===================================================
-echo  Triggering OpenOCD Build for Windows 7+ via WSL
-echo ===================================================
+echo ===================================================================
+echo  Triggering OpenOCD Build for Windows and Linux via WSL
+echo ===================================================================
 
 wsl -u root bash -c "cd $(wslpath '%CD%') && chmod +x build.sh && ./build.sh %*"
 

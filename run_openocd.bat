@@ -6,7 +6,7 @@ echo ===================================================
 echo  Starting OpenOCD for ARM968E-S via CMSIS-DAP (x64)
 echo ===================================================
 
-openocd.exe -s ./scripts -f arm968es_cmsisdap.cfg %*
+openocd.exe %*
 
 if errorlevel 1 (
     echo.

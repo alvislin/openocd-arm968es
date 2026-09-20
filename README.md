@@ -1,12 +1,15 @@
-# OpenOCD for ARM968E-S (Standalone Single Executable)
+# OpenOCD for ARM968E-S (Standalone Single Executables)
 
-A dedicated, standalone single-executable build of **OpenOCD** (`0.12.0+dev`) targeting **Windows 7 and up (64-bit)**, pre-configured specifically for debugging **ARM968E-S** cores using **CMSIS-DAP** adapters over JTAG.
+Dedicated, standalone single-executable builds of **OpenOCD** (`0.12.0+dev`) for both **Windows (64-bit)** and **Linux (x86_64)**, pre-configured specifically for debugging **ARM968E-S** cores using **CMSIS-DAP** adapters over JTAG.
 
 ---
 
 ## 1. Features
 
-- **Single Self-Contained Executable**: `openocd.exe` does not require any external configuration files or script directories (`scripts/` folder is not required).
+- **Single Self-Contained Executables**:
+  - Windows: `openocd.exe` and `bin/openocd.exe` (statically linked PE x64 executable, no external DLLs or runtime files required).
+  - Linux: `openocd` and `bin/openocd` (statically linked ELF x86_64 executable, `not a dynamic executable`, zero `.so` or `libudev` dependencies).
+  - Zero runtime dependencies: No external `.cfg` scripts or `scripts/` directory needed.
 - **Embedded Hardware Configuration**:
   - Adapter Driver: `cmsis-dap` (supports both CMSIS-DAP v1 HID and v2 WinUSB/bulk)
   - Transport: `jtag`
@@ -14,14 +17,14 @@ A dedicated, standalone single-executable build of **OpenOCD** (`0.12.0+dev`) ta
   - TAP: `arm968.cpu` (`-irlen 4 -ircapture 0x1 -irmask 0x0f`)
   - Reset Config: `none`
 - **Zero Warnings**: Uses modern `-tap` parameter syntax and modern port directives (`gdb port`, `telnet port`, `tcl port`).
-- **Windows 7+ Compatible**: Statically linked against standard `msvcrt.dll`, `libusb-1.0`, and `hidapi`. No external DLLs needed.
+- **Custom Fast CLI**: Direct `-s/--speed` and `-p/--port` flags without having to deal with TCL expressions or long OpenOCD options.
 
 ---
 
 ## 2. Command-Line Options
 
 ```
-Usage: openocd.exe [options]
+Usage: openocd [options] (or openocd.exe [options])
 
 Options:
   -s, --speed <khz>        JTAG clock rate in kHz (default: 200)
@@ -34,36 +37,74 @@ Options:
 ```
 
 ### Examples:
-```powershell
-# 1. Run with default 200 kHz and default port 3333:
-.\openocd.exe
 
-# 2. Run with 500 kHz JTAG clock:
-.\openocd.exe -s 500
+#### On Windows:
+```cmd
+:: 1. Run with default 200 kHz and default port 3333
+openocd.exe
+:: or using the runner script:
+run_openocd.bat
 
-# 3. Run with custom GDB port (e.g., 2331):
-.\openocd.exe -p 2331
+:: 2. Run with 500 kHz JTAG clock
+openocd.exe -s 500
 
-# 4. Run with both custom speed and port:
-.\openocd.exe -s 1000 -p 3333
+:: 3. Run with custom GDB port (e.g., 2331)
+openocd.exe -p 2331
+
+:: 4. Run with both custom speed and port
+openocd.exe -s 1000 -p 3333
+```
+
+#### On Linux:
+```bash
+# 1. Run with default 200 kHz and default port 3333
+./openocd
+# or using the runner script:
+./run_openocd.sh
+
+# 2. Run with 500 kHz JTAG clock
+./openocd -s 500
+
+# 3. Run with custom GDB port (e.g., 2331)
+./openocd -p 2331
+
+# 4. Run with both custom speed and port
+./openocd -s 1000 -p 3333
 ```
 
 ---
 
 ## 3. How to Build From Source
 
-To rebuild the single executable from the in-tree sources:
+### Building on Windows (via WSL2):
+Convenience scripts are provided in the root directory:
+- **Build Both (Windows & Linux)**:
+  - Double-click `build_all.bat` or run: `build.bat all`
+- **Build Windows Only**:
+  - Double-click `build_windows.bat` or run: `build.bat windows`
+- **Build Linux Only**:
+  - Double-click `build_linux.bat` or run: `build.bat linux`
+- **Clean Build Artifacts**:
+  - Run: `build.bat clean`
 
-### From Windows:
-Double-click `build.bat` or run:
-```cmd
-build.bat
-```
-
-### From WSL Bash:
+### Building in Linux / WSL Bash:
 ```bash
-./build.sh
+# Build both Windows and Linux single binaries:
+./build.sh all
+
+# Build Windows only:
+./build.sh windows
+
+# Build Linux only:
+./build.sh linux
+
+# Clean:
+./build.sh clean
 ```
+
+All built binaries are automatically copied to both the project root and `bin/` directory:
+- `openocd.exe` & `bin/openocd.exe` (Windows 64-bit standalone)
+- `openocd` & `bin/openocd` (Linux x86_64 standalone)
 
 ---
 
