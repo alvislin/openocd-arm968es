@@ -75,7 +75,152 @@ To produce an ELF binary that runs on any x86_64 Linux machine without missing l
 
 ---
 
-## 3. Verification & Test Results
+## 3. How Windows & Linux Builds Are Performed Using WSL
+
+WSL (Windows Subsystem for Linux, Ubuntu 24.04 LTS) is used as the **unified build hub** to compile both the Windows 64-bit executable and the Linux x86_64 executable. This architecture guarantees reproducible, dependency-isolated builds while providing single-click convenience from Windows.
+
+### A. Environment Architecture
+
+```
++-----------------------------------------------------------------------------------------+
+|                                    WINDOWS HOST                                         |
+|                                                                                         |
+|   Workspace: C:\antigravity\openocd-arm968es                                            |
+|   One-Click Batch Scripts: build_windows.bat | build_linux.bat | build_all.bat              |
+|                                     |                                                   |
+|                        Calls wsl.exe -u root bash -c "..."                              |
+|                                     v                                                   |
+|   +---------------------------------------------------------------------------------+   |
+|   |                         WSL2 (Ubuntu 24.04 LTS)                                 |   |
+|   |   Mounted at: /mnt/c/antigravity/openocd-arm968es                               |   |
+|   |   Build Script: ./build.sh [windows | linux | all | clean]                      |   |
+|   |                                                                                 |   |
+|   |   +---------------------------------+   +-----------------------------------+   |   |
+|   |   |        WINDOWS TARGET           |   |           LINUX TARGET            |   |   |
+|   |   | Toolchain: x86_64-w64-mingw32-  |   | Toolchain: native gcc (Ubuntu)    |   |   |
+|   |   | Target: Windows 7+ x64          |   | Target: Linux x86_64 (glibc/musl) |   |   |
+|   |   | Output: build/prefix_win64/     |   | Output: build/prefix_linux64/     |   |   |
+|   |   |         openocd.exe (PE 64-bit) |   |         openocd (ELF 64-bit)      |   |   |
+|   |   +---------------------------------+   +-----------------------------------+   |   |
+|   +---------------------------------------------------------------------------------+   |
+|                                     |                                                   |
+|         Outputs written directly to Windows workspace (bin/ and root)                   |
+|                                     v                                                   |
+|   openocd.exe & bin/openocd.exe           openocd & bin/openocd                         |
+|   (Ready for Windows CMD/PowerShell)      (Ready for Linux / WSL deployment)            |
++-----------------------------------------------------------------------------------------+
+```
+
+### B. Windows Build Flow via WSL (MinGW-w64 Cross-Compilation)
+
+When `./build.sh windows` (or `build_windows.bat`) is executed:
+
+1. **Clean & Isolate**:
+   The build script ensures tree cleanliness (`make distclean 2>/dev/null || true`) and sets up an isolated prefix directory `build/prefix_win64`.
+2. **Cross-Compiling LibUSB**:
+   ```bash
+   cd deps/libusb
+   ./configure --host=x86_64-w64-mingw32 --prefix="${PREFIX_WIN}" \
+               --enable-static --disable-shared
+   make -j$(nproc) && make install
+   ```
+   This produces `build/prefix_win64/lib/libusb-1.0.a` without any Linux socket or udev code.
+3. **Cross-Compiling HIDAPI**:
+   ```bash
+   cd deps/hidapi
+   ./configure --host=x86_64-w64-mingw32 --prefix="${PREFIX_WIN}" \
+               --enable-static --disable-shared
+   make -j$(nproc) && make install
+   ```
+   On Windows/MinGW, HIDAPI compiles `windows/hid.c`, interfacing directly with Windows `hid.dll` and `setupapi.dll`.
+4. **Configuring & Linking OpenOCD for Windows**:
+   ```bash
+   export PKG_CONFIG_PATH="${PREFIX_WIN}/lib/pkgconfig"
+   ./configure --host=x86_64-w64-mingw32 \
+               --prefix="${PREFIX_WIN}" \
+               --enable-cmsis-dap \
+               CFLAGS="-O2 -D_WIN32_WINNT=0x0601" \
+               LDFLAGS="-static -static-libgcc -L${PREFIX_WIN}/lib" \
+               LIBUSB1_CFLAGS="-I${PREFIX_WIN}/include/libusb-1.0" \
+               LIBUSB1_LIBS="-L${PREFIX_WIN}/lib -lusb-1.0" \
+               HIDAPI_CFLAGS="-I${PREFIX_WIN}/include/hidapi" \
+               HIDAPI_LIBS="-L${PREFIX_WIN}/lib -lhidapi -lsetupapi"
+   make -j$(nproc)
+   ```
+5. **Strip and Publish**:
+   The binary is stripped using `x86_64-w64-mingw32-strip -s src/openocd.exe` and copied to both `openocd.exe` and `bin/openocd.exe`.
+
+---
+
+### C. Linux Build Flow via WSL (Native Static Compilation)
+
+When `./build.sh linux` (or `build_linux.bat`) is executed:
+
+1. **Clean & Isolate**:
+   Cleans tree and sets up isolated prefix `build/prefix_linux64`.
+2. **Compiling LibUSB (Netlink Mode)**:
+   ```bash
+   cd deps/libusb
+   ./configure --prefix="${PREFIX_LINUX}" \
+               --enable-static --disable-shared --disable-udev
+   make -j$(nproc) && make install
+   ```
+   **Crucial detail**: `--disable-udev` directs LibUSB to use Linux Netlink sockets (`linux_netlink.c`), eliminating the dependency on `libudev.so.1`.
+3. **Compiling HIDAPI (Libusb Backend)**:
+   ```bash
+   cd deps/hidapi
+   ./configure --prefix="${PREFIX_LINUX}" \
+               --enable-static --disable-shared
+   make -j$(nproc) && make install
+   cp -f "${PREFIX_LINUX}/lib/pkgconfig/hidapi-libusb.pc" "${PREFIX_LINUX}/lib/pkgconfig/hidapi.pc"
+   rm -f "${PREFIX_LINUX}/lib/pkgconfig/hidapi-hidraw.pc"
+   ```
+   Forces OpenOCD to link against `libhidapi-libusb.a` rather than `libhidapi-hidraw.a`, further ensuring `libudev` is not introduced.
+4. **Configuring & Linking OpenOCD for Linux**:
+   ```bash
+   export PKG_CONFIG_PATH="${PREFIX_LINUX}/lib/pkgconfig"
+   ./configure --prefix="${PREFIX_LINUX}" \
+               --enable-cmsis-dap \
+               CFLAGS="-O2" \
+               LDFLAGS="-L${PREFIX_LINUX}/lib" \
+               LIBUSB1_CFLAGS="-I${PREFIX_LINUX}/include/libusb-1.0" \
+               LIBUSB1_LIBS="-L${PREFIX_LINUX}/lib -lusb-1.0" \
+               HIDAPI_CFLAGS="-I${PREFIX_LINUX}/include/hidapi" \
+               HIDAPI_LIBS="-L${PREFIX_LINUX}/lib -lhidapi-libusb"
+   make -j$(nproc) AM_LDFLAGS="-all-static"
+   ```
+   **Crucial detail**: Passing `AM_LDFLAGS="-all-static"` to `make` instructs Libtool to link the final executable with `-static` without breaking JimTCL's host tools (`jimsh`), yielding a 100% statically linked ELF binary.
+5. **Strip and Publish**:
+   The binary is stripped using `strip -s src/openocd` and copied to both `openocd` and `bin/openocd`.
+
+---
+
+### D. Windows-to-WSL Bridge Scripts
+
+To provide a seamless experience on Windows, batch wrappers forward execution directly into WSL:
+
+- [build_all.bat](file:///c:/antigravity/openocd-arm968es/build_all.bat):
+  ```cmd
+  @echo off
+  wsl -u root bash -c "cd /mnt/c/antigravity/openocd-arm968es && chmod +x build.sh && ./build.sh all"
+  pause
+  ```
+- [build_windows.bat](file:///c:/antigravity/openocd-arm968es/build_windows.bat):
+  ```cmd
+  @echo off
+  wsl -u root bash -c "cd /mnt/c/antigravity/openocd-arm968es && chmod +x build.sh && ./build.sh windows"
+  pause
+  ```
+- [build_linux.bat](file:///c:/antigravity/openocd-arm968es/build_linux.bat):
+  ```cmd
+  @echo off
+  wsl -u root bash -c "cd /mnt/c/antigravity/openocd-arm968es && chmod +x build.sh && ./build.sh linux"
+  pause
+  ```
+
+---
+
+## 4. Verification & Test Results
 
 ### A. Linux Standalone Binary Verification
 
@@ -156,7 +301,7 @@ Info : Listening on port 3333 for gdb connections
 
 ---
 
-## 4. Artifacts & Deliverables Summary
+## 5. Artifacts & Deliverables Summary
 
 | Artifact | Description | Size | Location |
 | :--- | :--- | :--- | :--- |
