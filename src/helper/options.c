@@ -264,92 +264,144 @@ static void add_default_dirs(void)
 
 int parse_cmdline_args(struct command_context *cmd_ctx, int argc, char *argv[])
 {
-	int c;
+	int jtag_clock_khz = 200;   /* Default 200 kHz */
+	int gdb_tcp_port = 3333;    /* Default GDB port 3333 */
+	int telnet_tcp_port = 4444; /* Default Telnet port 4444 */
+	int tcl_tcp_port = 6666;    /* Default TCL port 6666 */
 
-	while (1) {
-		/* getopt_long stores the option index here. */
-		int option_index = 0;
+	for (int i = 1; i < argc; i++) {
+		const char *arg = argv[i];
 
-		c = getopt_long(argc, argv, "hvd::l:f:s:c:", long_options, &option_index);
-
-		/* Detect the end of the options. */
-		if (c == -1)
-			break;
-
-		switch (c) {
-		case 0:
-			break;
-		case 'h':		/* --help | -h */
-			help_flag = 1;
-			break;
-		case 'v':		/* --version | -v */
-			version_flag = 1;
-			break;
-		case 'f':		/* --file | -f */
-		{
-			char *command = alloc_printf("script {%s}", optarg);
-			add_config_command(command);
-			free(command);
-			break;
-		}
-		case 's':		/* --search | -s */
-			add_script_search_dir(optarg);
-			break;
-		case 'd':		/* --debug | -d */
-		{
-			int retval = command_run_linef(cmd_ctx, "debug_level %s", optarg ? optarg : "3");
-			if (retval != ERROR_OK)
-				return retval;
-			break;
-		}
-		case 'l':		/* --log_output | -l */
-		{
-			int retval = command_run_linef(cmd_ctx, "log_output %s", optarg);
-			if (retval != ERROR_OK)
-				return retval;
-			break;
-		}
-		case 'c':		/* --command | -c */
-			add_config_command(optarg);
-			break;
-		default:  /* '?' */
-			/* getopt will emit an error message, all we have to do is bail. */
+		if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
+			LOG_OUTPUT("Open On-Chip Debugger (ARM968E-S CMSIS-DAP Dedicated Build)\n");
+			LOG_OUTPUT("Usage: %s [options]\n\n", argv[0]);
+			LOG_OUTPUT("Options:\n");
+			LOG_OUTPUT("  -s, --speed <khz>        JTAG clock rate in kHz (default: 200)\n");
+			LOG_OUTPUT("  -p, --port <port>        GDB server TCP port (default: 3333)\n");
+			LOG_OUTPUT("      --gdb-port <port>    GDB server TCP port (default: 3333)\n");
+			LOG_OUTPUT("      --telnet-port <port> Telnet console TCP port (default: 4444)\n");
+			LOG_OUTPUT("      --tcl-port <port>    TCL RPC TCP port (default: 6666)\n");
+			LOG_OUTPUT("  -h, --help               Display this help message\n");
+			LOG_OUTPUT("  -v, --version            Display OpenOCD version\n");
+			exit(0);
+		} else if (strcmp(arg, "-v") == 0 || strcmp(arg, "--version") == 0) {
+			/* Version string is printed on startup */
+			exit(0);
+		} else if (strcmp(arg, "-s") == 0 || strcmp(arg, "--speed") == 0) {
+			if (i + 1 >= argc) {
+				LOG_OUTPUT("Error: '%s' requires a clock rate in kHz (e.g. 200).\n", arg);
+				return ERROR_FAIL;
+			}
+			i++;
+			char *endptr = NULL;
+			long val = strtol(argv[i], &endptr, 10);
+			if (!endptr || *endptr != '\0' || val <= 0) {
+				LOG_OUTPUT("Error: Invalid JTAG clock rate '%s'. Must be a positive integer in kHz.\n", argv[i]);
+				return ERROR_FAIL;
+			}
+			jtag_clock_khz = (int)val;
+		} else if (arg[0] == '-' && arg[1] == 's' && arg[2] != '\0') {
+			/* e.g. -s500 */
+			char *endptr = NULL;
+			long val = strtol(arg + 2, &endptr, 10);
+			if (!endptr || *endptr != '\0' || val <= 0) {
+				LOG_OUTPUT("Error: Invalid JTAG clock rate '%s'. Must be a positive integer in kHz.\n", arg);
+				return ERROR_FAIL;
+			}
+			jtag_clock_khz = (int)val;
+		} else if (strcmp(arg, "-p") == 0 || strcmp(arg, "--port") == 0 || strcmp(arg, "--gdb-port") == 0) {
+			if (i + 1 >= argc) {
+				LOG_OUTPUT("Error: '%s' requires a TCP port number (e.g. 3333).\n", arg);
+				return ERROR_FAIL;
+			}
+			i++;
+			char *endptr = NULL;
+			long val = strtol(argv[i], &endptr, 10);
+			if (!endptr || *endptr != '\0' || val < 0 || val > 65535) {
+				LOG_OUTPUT("Error: Invalid TCP port '%s'. Must be between 0 and 65535.\n", argv[i]);
+				return ERROR_FAIL;
+			}
+			gdb_tcp_port = (int)val;
+		} else if (arg[0] == '-' && arg[1] == 'p' && arg[2] != '\0') {
+			/* e.g. -p3333 */
+			char *endptr = NULL;
+			long val = strtol(arg + 2, &endptr, 10);
+			if (!endptr || *endptr != '\0' || val < 0 || val > 65535) {
+				LOG_OUTPUT("Error: Invalid TCP port '%s'. Must be between 0 and 65535.\n", arg);
+				return ERROR_FAIL;
+			}
+			gdb_tcp_port = (int)val;
+		} else if (strcmp(arg, "--telnet-port") == 0) {
+			if (i + 1 >= argc) {
+				LOG_OUTPUT("Error: '--telnet-port' requires a port number (e.g. 4444).\n");
+				return ERROR_FAIL;
+			}
+			i++;
+			char *endptr = NULL;
+			long val = strtol(argv[i], &endptr, 10);
+			if (!endptr || *endptr != '\0' || val < 0 || val > 65535) {
+				LOG_OUTPUT("Error: Invalid Telnet port '%s'. Must be between 0 and 65535.\n", argv[i]);
+				return ERROR_FAIL;
+			}
+			telnet_tcp_port = (int)val;
+		} else if (strcmp(arg, "--tcl-port") == 0) {
+			if (i + 1 >= argc) {
+				LOG_OUTPUT("Error: '--tcl-port' requires a port number (e.g. 6666).\n");
+				return ERROR_FAIL;
+			}
+			i++;
+			char *endptr = NULL;
+			long val = strtol(argv[i], &endptr, 10);
+			if (!endptr || *endptr != '\0' || val < 0 || val > 65535) {
+				LOG_OUTPUT("Error: Invalid TCL port '%s'. Must be between 0 and 65535.\n", argv[i]);
+				return ERROR_FAIL;
+			}
+			tcl_tcp_port = (int)val;
+		} else if (arg[0] != '-') {
+			/* Positional clock rate: e.g. openocd.exe 500 */
+			char *endptr = NULL;
+			long val = strtol(arg, &endptr, 10);
+			if (!endptr || *endptr != '\0' || val <= 0) {
+				LOG_OUTPUT("Error: Invalid JTAG clock rate '%s'. Must be a positive integer in kHz.\n", arg);
+				LOG_OUTPUT("Usage: %s [-s <clock_khz>] [-p <tcp_port>]\n", argv[0]);
+				return ERROR_FAIL;
+			}
+			jtag_clock_khz = (int)val;
+		} else {
+			LOG_OUTPUT("Error: Unrecognized option '%s'.\n", arg);
+			LOG_OUTPUT("Usage: %s [-s <clock_khz>] [-p <tcp_port>]\n", argv[0]);
 			return ERROR_FAIL;
 		}
 	}
 
-	if (optind < argc) {
-		/* Catch extra arguments on the command line. */
-		LOG_OUTPUT("Unexpected command line argument: %s\n", argv[optind]);
-		return ERROR_FAIL;
-	}
+	LOG_INFO("ARM968E-S CMSIS-DAP debugger: JTAG clock %d kHz, GDB TCP port %d",
+		jtag_clock_khz, gdb_tcp_port);
 
-	if (help_flag) {
-		LOG_OUTPUT("Open On-Chip Debugger\nLicensed under GNU GPL v2\n");
-		LOG_OUTPUT("--help       | -h\tdisplay this help\n");
-		LOG_OUTPUT("--version    | -v\tdisplay OpenOCD version\n");
-		LOG_OUTPUT("--file       | -f\tuse configuration file <name>\n");
-		LOG_OUTPUT("--search     | -s\tdir to search for config files and scripts\n");
-		LOG_OUTPUT("--debug      | -d\tset debug level to 3\n");
-		LOG_OUTPUT("             | -d<n>\tset debug level to <level>\n");
-		LOG_OUTPUT("--log_output | -l\tredirect log output to file <name>\n");
-		LOG_OUTPUT("--command    | -c\trun <command>\n");
-		exit(0);
-	}
+	/* Set TCP ports */
+	char *port_cmd = alloc_printf("gdb port %d", gdb_tcp_port);
+	add_config_command(port_cmd);
+	free(port_cmd);
 
-	if (version_flag) {
-		/* Nothing to do, version gets printed automatically. */
-		/* It is not an error to request the VERSION number. */
-		exit(0);
-	}
+	port_cmd = alloc_printf("telnet port %d", telnet_tcp_port);
+	add_config_command(port_cmd);
+	free(port_cmd);
 
-	/* dump full command line */
-	for (int i = 0; i < argc; i++)
-		LOG_DEBUG("ARGV[%d] = \"%s\"", i, argv[i]);
+	port_cmd = alloc_printf("tcl port %d", tcl_tcp_port);
+	add_config_command(port_cmd);
+	free(port_cmd);
 
-	/* paths specified on the command line take precedence over these
-	 * built-in paths
-	 */
+	/* Fixed configuration for ARM968E-S via CMSIS-DAP in JTAG mode */
+	add_config_command("adapter driver cmsis-dap");
+	add_config_command("transport select jtag");
+
+	char *speed_cmd = alloc_printf("adapter speed %d", jtag_clock_khz);
+	add_config_command(speed_cmd);
+	free(speed_cmd);
+
+	add_config_command("jtag newtap arm968 cpu -irlen 4 -ircapture 0x1 -irmask 0x0f");
+	add_config_command("target create arm968.cpu arm966e -endian little -tap arm968.cpu");
+	add_config_command("reset_config none");
+
 	add_default_dirs();
 
 	return ERROR_OK;

@@ -1,64 +1,79 @@
-# OpenOCD for ARM968E-S (Windows 7+ x64)
+# OpenOCD for ARM968E-S (Standalone Single Executable)
 
-This repository contains the full source code and build system for **OpenOCD** (`0.12.0+dev`) targeting **Windows 7 and up (64-bit)**, configured for debugging **ARM968E-S** cores using **CMSIS-DAP** adapters in JTAG/SWD mode.
-
----
-
-## 1. Project Structure
-
-- `src/`: OpenOCD source code (C core, targets, JTAG/SWD drivers).
-- `tcl/`: OpenOCD official TCL scripts (board, target, interface).
-- `scripts/`: Deployed runtime script directory used by `openocd.exe`.
-- `jimtcl/`: JimTCL embedded interpreter source.
-- `deps/libusb/`: Full source of `libusb-1.0` (compiled statically for CMSIS-DAP v2 WinUSB).
-- `deps/hidapi/`: Full source of `hidapi` (compiled statically for CMSIS-DAP v1 HID).
-- `arm968es_cmsisdap.cfg`: Target configuration for ARM968E-S over CMSIS-DAP in JTAG mode.
-- `openocd.exe` (and `bin/openocd.exe`): 64-bit standalone Windows executable.
-- `build.sh`: Bash build script (via MinGW-w64).
-- `build.bat`: One-click Windows batch runner to rebuild OpenOCD.
-- `run_openocd.bat`: Launch script to run OpenOCD with `arm968es_cmsisdap.cfg`.
+A dedicated, standalone single-executable build of **OpenOCD** (`0.12.0+dev`) targeting **Windows 7 and up (64-bit)**, pre-configured specifically for debugging **ARM968E-S** cores using **CMSIS-DAP** adapters over JTAG.
 
 ---
 
-## 2. Windows 7 Compatibility
+## 1. Features
 
-- **Target NT Version**: `_WIN32_WINNT=0x0601` (Windows 7).
-- **C Runtime**: Linked against standard system `msvcrt.dll` (no UCRT update required on clean Windows 7).
-- **Static Dependencies**: `libusb-1.0`, `hidapi`, and `libgcc` are statically linked with no external DLL requirements.
-- **Imported DLLs**: Only standard system libraries (`KERNEL32.dll`, `msvcrt.dll`, `USER32.dll`, `WS2_32.dll`).
+- **Single Self-Contained Executable**: `openocd.exe` does not require any external configuration files or script directories (`scripts/` folder is not required).
+- **Embedded Hardware Configuration**:
+  - Adapter Driver: `cmsis-dap` (supports both CMSIS-DAP v1 HID and v2 WinUSB/bulk)
+  - Transport: `jtag`
+  - Target: `arm968.cpu` using `arm966e` EmbeddedICE driver
+  - TAP: `arm968.cpu` (`-irlen 4 -ircapture 0x1 -irmask 0x0f`)
+  - Reset Config: `none`
+- **Zero Warnings**: Uses modern `-tap` parameter syntax and modern port directives (`gdb port`, `telnet port`, `tcl port`).
+- **Windows 7+ Compatible**: Statically linked against standard `msvcrt.dll`, `libusb-1.0`, and `hidapi`. No external DLLs needed.
 
 ---
 
-## 3. How to Build
+## 2. Command-Line Options
 
-From Windows CMD or PowerShell:
+```
+Usage: openocd.exe [options]
+
+Options:
+  -s, --speed <khz>        JTAG clock rate in kHz (default: 200)
+  -p, --port <port>        GDB server TCP port (default: 3333)
+      --gdb-port <port>    GDB server TCP port (default: 3333)
+      --telnet-port <port> Telnet console TCP port (default: 4444)
+      --tcl-port <port>    TCL RPC TCP port (default: 6666)
+  -h, --help               Display this help message
+  -v, --version            Display OpenOCD version
+```
+
+### Examples:
+```powershell
+# 1. Run with default 200 kHz and default port 3333:
+.\openocd.exe
+
+# 2. Run with 500 kHz JTAG clock:
+.\openocd.exe -s 500
+
+# 3. Run with custom GDB port (e.g., 2331):
+.\openocd.exe -p 2331
+
+# 4. Run with both custom speed and port:
+.\openocd.exe -s 1000 -p 3333
+```
+
+---
+
+## 3. How to Build From Source
+
+To rebuild the single executable from the in-tree sources:
+
+### From Windows:
+Double-click `build.bat` or run:
 ```cmd
 build.bat
 ```
 
-Or from WSL bash:
+### From WSL Bash:
 ```bash
 ./build.sh
 ```
 
 ---
 
-## 4. Configuration (`arm968es_cmsisdap.cfg`)
+## 4. Connecting GDB / Telnet
 
-```tcl
-adapter driver cmsis-dap
-transport select jtag
-adapter speed 200
-jtag newtap arm968 cpu -irlen 4 -ircapture 0x1 -irmask 0x0f
-target create arm968.cpu arm966e -endian little -chain-position arm968.cpu
-reset_config none
-```
-
----
-
-## 5. How to Run
-
-Double-click `run_openocd.bat` or run:
-```powershell
-.\openocd.exe -s ./scripts -f arm968es_cmsisdap.cfg
-```
+- **GDB Port**: `localhost:<port>` (default: `localhost:3333`)
+  ```bash
+  arm-none-eabi-gdb -ex "target remote localhost:3333"
+  ```
+- **Telnet Console**: `localhost:4444`
+  ```bash
+  telnet localhost 4444
+  ```
