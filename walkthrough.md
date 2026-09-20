@@ -1,48 +1,83 @@
 # Walkthrough: Dual-Platform Single-Executable OpenOCD for ARM968E-S via CMSIS-DAP (Windows & Linux)
 
-## 1. Summary of Accomplishments
+## 1. Overview & Objectives
 
-1. **Dual Single-Executable Architecture**:
-   - **Windows (`openocd.exe` & `bin/openocd.exe`)**:
-     - 64-bit PE executable statically linked against `libusb-1.0` and `hidapi`.
-     - Zero external DLL dependencies (links against system `msvcrt.dll`, `kernel32.dll`, `ws2_32.dll`).
-     - Zero external `.cfg` script or `scripts/` directory dependencies.
-   - **Linux (`openocd` & `bin/openocd`)**:
-     - 64-bit ELF statically linked executable (`not a dynamic executable`).
-     - LibUSB built with `--disable-udev` (Linux Netlink socket fallback) eliminating `libudev.so.1` dependency.
-     - OpenOCD built with `AM_LDFLAGS="-all-static"` ensuring a fully static binary with zero `.so` runtime dependencies.
-     - Zero external `.cfg` script or `scripts/` directory dependencies.
+The goal was to build dedicated, standalone, single-executable binaries of **OpenOCD** (`0.12.0+dev`) for both **Windows (64-bit)** and **Linux (x86_64)**, pre-configured specifically for debugging **ARM968E-S** processor cores using **CMSIS-DAP** adapters over **JTAG**.
 
-2. **Embedded Hardware Configuration**:
-   - Both Windows and Linux binaries embed the exact same dedicated ARM968E-S CMSIS-DAP JTAG configuration in `src/helper/options.c`.
-   - Adapter Driver: `cmsis-dap` (CMSIS-DAP v1 HID and v2 WinUSB/bulk).
-   - Transport: `jtag`.
-   - Target: `arm968.cpu` using `arm966e` EmbeddedICE driver.
-   - Modern syntax: `-tap arm968.cpu`, modern port directives (`gdb port`, `telnet port`, `tcl port`).
-   - Zero deprecation warnings.
-
-3. **Unified CLI**:
-   - `-s`, `--speed <khz>`: Sets JTAG clock rate (defaults to `200` kHz). Also supports positional argument `<khz>`.
-   - `-p`, `--port <port>`: Sets the GDB server TCP port (defaults to `3333`). Also supports `--gdb-port <port>`.
-   - `--telnet-port <port>`: Sets Telnet console TCP port (defaults to `4444`).
-   - `--tcl-port <port>`: Sets TCL RPC TCP port (defaults to `6666`).
-   - `-h`, `--help`: Prints concise usage and option summary.
-   - `-v`, `--version`: Prints OpenOCD version.
-
-4. **Modular Build & Run Scripts**:
-   - `build.sh`: Shell script supporting `all`, `windows`, `linux`, and `clean` targets.
-   - `build.bat`: Windows batch wrapper forwarding arguments to WSL `./build.sh %*`.
-   - `build_all.bat`: One-click build of both Windows & Linux binaries.
-   - `build_windows.bat`: One-click build of Windows binary only.
-   - `build_linux.bat`: One-click build of Linux binary only.
-   - `run_openocd.bat`: Runner script for Windows (`openocd.exe %*`).
-   - `run_openocd.sh`: Runner script for Linux (`./openocd "$@"`).
+### Key Requirements Met:
+- **No External Dependencies at Runtime**:
+  - Zero `.cfg` configuration files or `scripts/` directory needed.
+  - Windows: Single `openocd.exe` statically linked against `libusb-1.0` and `hidapi`; requires only core Windows system DLLs (`msvcrt.dll`, `kernel32.dll`, `ws2_32.dll`).
+  - Linux: Single `openocd` ELF binary completely statically linked (`not a dynamic executable`); zero `.so` runtime dependencies and zero `libudev.so.1` dependency.
+- **Embedded Hardware Configuration**:
+  - Driver: `cmsis-dap` (CMSIS-DAP v1 HID and v2 WinUSB/bulk)
+  - Transport: `jtag`
+  - Target: `arm968.cpu` (`arm966e` EmbeddedICE driver)
+  - TAP: `arm968.cpu` (`-irlen 4 -ircapture 0x1 -irmask 0x0f`)
+  - Reset Config: `none`
+  - Zero deprecation warnings on startup (modern `-tap` syntax and modern port directives).
+- **Custom Fast CLI Options**:
+  - `-s, --speed <khz>`: JTAG clock speed in kHz (default: `200`).
+  - `-p, --port <port>`: GDB TCP port (default: `3333`).
+  - Custom options for Telnet (`--telnet-port 4444`) and TCL (`--tcl-port 6666`).
+- **Complete Dual-Platform Build Automation**:
+  - Linux/WSL: Modular `build.sh` supporting `all`, `windows`, `linux`, `clean`.
+  - Windows: `build.bat`, `build_all.bat`, `build_windows.bat`, `build_linux.bat`.
+  - Launchers: `run_openocd.bat` (Windows) and `run_openocd.sh` (Linux).
 
 ---
 
-## 2. Verification Results
+## 2. Technical Implementation Details
 
-### A. Linux Binary Verification (`openocd` & `bin/openocd`)
+### A. Embedded C Configuration & CLI Parser
+In [src/helper/options.c](file:///c:/antigravity/openocd-arm968es/src/helper/options.c), custom argument parsing interceptor handles `-s/--speed` and `-p/--port`:
+```c
+/* Inject embedded configuration for ARM968E-S CMSIS-DAP JTAG */
+add_default_dirs();
+
+/* 1. Interface & Transport */
+command_run_line(CMD_CTX, "adapter driver cmsis-dap");
+command_run_line(CMD_CTX, "transport select jtag");
+
+/* 2. Clock speed & Ports */
+char cmd[64];
+snprintf(cmd, sizeof(cmd), "adapter speed %u", jtag_speed_khz);
+command_run_line(CMD_CTX, cmd);
+snprintf(cmd, sizeof(cmd), "gdb port %u", gdb_port);
+command_run_line(CMD_CTX, cmd);
+snprintf(cmd, sizeof(cmd), "telnet port %u", telnet_port);
+command_run_line(CMD_CTX, cmd);
+snprintf(cmd, sizeof(cmd), "tcl port %u", tcl_port);
+command_run_line(CMD_CTX, cmd);
+
+/* 3. Reset Configuration */
+command_run_line(CMD_CTX, "reset_config none");
+
+/* 4. TAP & Target definition */
+command_run_line(CMD_CTX, "jtag newtap arm968 cpu -irlen 4 -ircapture 0x1 -irmask 0x0f");
+command_run_line(CMD_CTX, "target create arm968.cpu arm966e -endian little -tap arm968.cpu");
+```
+
+### B. Linux Static Linking Architecture
+To produce an ELF binary that runs on any x86_64 Linux machine without missing library errors:
+1. **Eliminating `libudev.so.1`**:
+   - `deps/libusb` is configured with `--disable-udev`. LibUSB compiles `linux_netlink.c`, allowing USB hotplug and device enumeration directly through Linux Netlink sockets, removing any link or runtime dependency on `libudev`.
+   - `deps/hidapi` builds `libhidapi-libusb.a` (which uses pure libusb) rather than `libhidapi-hidraw.a` (which links `libudev`).
+2. **Eliminating Dynamic `.so` Dependencies**:
+   - OpenOCD is linked with `make AM_LDFLAGS="-all-static"`.
+   - Passing `AM_LDFLAGS` to `make` instructs Libtool to link the final `openocd` binary with `-static`, while avoiding compiler errors in JimTCL host tools (`jimsh`).
+   - Result: `not a dynamic executable`.
+
+### C. Windows MinGW-w64 Cross-Compilation
+- Uses `x86_64-w64-mingw32-gcc` with `-D_WIN32_WINNT=0x0601` (Windows 7+ compatibility).
+- Links statically against `libusb-1.0.a` and `libhidapi.a` with `-static -static-libgcc`.
+- Requires only built-in Windows system DLLs (`msvcrt.dll`, `kernel32.dll`, `ws2_32.dll`, `setupapi.dll`).
+
+---
+
+## 3. Verification & Test Results
+
+### A. Linux Standalone Binary Verification
 
 ```bash
 $ file openocd bin/openocd
@@ -55,6 +90,8 @@ not a dynamic executable
 $ ./openocd --help
 Open On-Chip Debugger 0.12.0+dev-g330024d-dirty (2026-09-20-04:56)
 Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
 Open On-Chip Debugger (ARM968E-S CMSIS-DAP Dedicated Build)
 Usage: ./openocd [options]
 
@@ -68,12 +105,14 @@ Options:
   -v, --version            Display OpenOCD version
 ```
 
-### B. Windows Binary Verification (`openocd.exe` & `bin/openocd.exe`)
+### B. Windows Standalone Binary Verification
 
 ```powershell
 PS C:\antigravity\openocd-arm968es> .\openocd.exe --help
 Open On-Chip Debugger 0.12.0+dev-g330024d-dirty (2026-09-20-04:47)
 Licensed under GNU GPL v2
+For bug reports, read
+	http://openocd.org/doc/doxygen/bugs.html
 Open On-Chip Debugger (ARM968E-S CMSIS-DAP Dedicated Build)
 Usage: C:\antigravity\openocd-arm968es\openocd.exe [options]
 
@@ -87,7 +126,7 @@ Options:
   -v, --version            Display OpenOCD version
 ```
 
-### C. Live Hardware Target Test (CMSIS-DAPv2 + ARM968E-S)
+### C. Live Hardware Test (CMSIS-DAPv2 + ARM968E-S Target)
 
 ```text
 PS C:\antigravity\openocd-arm968es> .\openocd.exe -s 500 -p 3333
@@ -117,9 +156,18 @@ Info : Listening on port 3333 for gdb connections
 
 ---
 
-## 3. Binaries Generated
+## 4. Artifacts & Deliverables Summary
 
-| Binary | Target OS | Linking | Size | Location |
-| :--- | :--- | :--- | :--- | :--- |
-| `openocd.exe` | Windows 7+ (x64) | Static (no DLLs) | ~4.0 MB | `./openocd.exe` & `./bin/openocd.exe` |
-| `openocd` | Linux (x86_64) | Fully Static (`not a dynamic executable`) | ~5.2 MB | `./openocd` & `./bin/openocd` |
+| Artifact | Description | Size | Location |
+| :--- | :--- | :--- | :--- |
+| **`openocd.exe`** | Windows 64-bit standalone executable | ~4.0 MB | [openocd.exe](file:///c:/antigravity/openocd-arm968es/openocd.exe), [bin/openocd.exe](file:///c:/antigravity/openocd-arm968es/bin/openocd.exe) |
+| **`openocd`** | Linux x86_64 fully static standalone executable | ~5.2 MB | [openocd](file:///c:/antigravity/openocd-arm968es/openocd), [bin/openocd](file:///c:/antigravity/openocd-arm968es/bin/openocd) |
+| **`build.sh`** | Bash build script (`all`, `windows`, `linux`, `clean`) | - | [build.sh](file:///c:/antigravity/openocd-arm968es/build.sh) |
+| **`build.bat`** | Windows batch wrapper forwarding to WSL | - | [build.bat](file:///c:/antigravity/openocd-arm968es/build.bat) |
+| **`build_all.bat`** | Windows 1-click batch build for all targets | - | [build_all.bat](file:///c:/antigravity/openocd-arm968es/build_all.bat) |
+| **`build_windows.bat`** | Windows 1-click batch build for Windows only | - | [build_windows.bat](file:///c:/antigravity/openocd-arm968es/build_windows.bat) |
+| **`build_linux.bat`** | Windows 1-click batch build for Linux only | - | [build_linux.bat](file:///c:/antigravity/openocd-arm968es/build_linux.bat) |
+| **`run_openocd.bat`** | Windows runner script | - | [run_openocd.bat](file:///c:/antigravity/openocd-arm968es/run_openocd.bat) |
+| **`run_openocd.sh`** | Linux runner script | - | [run_openocd.sh](file:///c:/antigravity/openocd-arm968es/run_openocd.sh) |
+| **`README.md`** | User & developer documentation | - | [README.md](file:///c:/antigravity/openocd-arm968es/README.md) |
+| **`walkthrough.md`** | Complete verification & architecture walkthrough | - | [walkthrough.md](file:///c:/antigravity/openocd-arm968es/walkthrough.md) |
