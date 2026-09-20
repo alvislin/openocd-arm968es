@@ -1,0 +1,11 @@
+prefix=/mnt/c/antigravity/openocd-arm968es/build/prefix_x64
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: hidapi-winapi
+Description: C Library for USB/Bluetooth HID device access from Linux, Mac OS X, FreeBSD, and Windows. This is the WinAPI implementation.
+URL: https://github.com/libusb/hidapi
+Version: 0.16.0
+Libs: -L${libdir} -lhidapi
+Cflags: -I${includedir}/hidapi

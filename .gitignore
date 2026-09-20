@@ -117,3 +117,15 @@ compile_commands.json
 
 # Local build directory
 build/
+
+# Intermediate build binaries in deps
+deps/hidapi/hidtest/*.exe
+deps/hidapi/testgui/
+jimtcl/jimsh.exe
+jimtcl/jimsh0
+jimtcl/_*.c
+jimtcl/jim-config.h
+jimtcl/jimautoconf.h
+jimtcl/configure.gnu
+jimtcl/jimtcl.pc
+
