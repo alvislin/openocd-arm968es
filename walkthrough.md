@@ -305,8 +305,8 @@ Info : Listening on port 3333 for gdb connections
 
 | Artifact | Description | Size | Location |
 | :--- | :--- | :--- | :--- |
-| **`openocd.exe`** | Windows 64-bit standalone executable | ~4.0 MB | [openocd.exe](file:///c:/antigravity/openocd-arm968es/openocd.exe), [bin/openocd.exe](file:///c:/antigravity/openocd-arm968es/bin/openocd.exe) |
-| **`openocd`** | Linux x86_64 fully static standalone executable | ~5.2 MB | [openocd](file:///c:/antigravity/openocd-arm968es/openocd), [bin/openocd](file:///c:/antigravity/openocd-arm968es/bin/openocd) |
+| **`openocd.exe`** / **`jtag_gdbserver.exe`** | Windows 64-bit standalone executable | ~4.0 MB | [openocd.exe](file:///c:/antigravity/openocd-arm968es/openocd.exe), [jtag_gdbserver.exe](file:///c:/antigravity/openocd-arm968es/jtag_gdbserver.exe), [bin/openocd.exe](file:///c:/antigravity/openocd-arm968es/bin/openocd.exe), [bin/jtag_gdbserver.exe](file:///c:/antigravity/openocd-arm968es/bin/jtag_gdbserver.exe) |
+| **`openocd`** / **`jtag_gdbserver`** | Linux x86_64 fully static standalone executable | ~5.2 MB | [openocd](file:///c:/antigravity/openocd-arm968es/openocd), [jtag_gdbserver](file:///c:/antigravity/openocd-arm968es/jtag_gdbserver), [bin/openocd](file:///c:/antigravity/openocd-arm968es/bin/openocd), [bin/jtag_gdbserver](file:///c:/antigravity/openocd-arm968es/bin/jtag_gdbserver) |
 | **`build.sh`** | Bash build script (`all`, `windows`, `linux`, `clean`) | - | [build.sh](file:///c:/antigravity/openocd-arm968es/build.sh) |
 | **`build.bat`** | Windows batch wrapper forwarding to WSL | - | [build.bat](file:///c:/antigravity/openocd-arm968es/build.bat) |
 | **`build_all.bat`** | Windows 1-click batch build for all targets | - | [build_all.bat](file:///c:/antigravity/openocd-arm968es/build_all.bat) |

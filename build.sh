@@ -93,8 +93,10 @@ build_windows() {
     mkdir -p "${REPO_ROOT}/bin"
     cp -f src/openocd.exe "${REPO_ROOT}/openocd.exe"
     cp -f src/openocd.exe "${REPO_ROOT}/bin/openocd.exe"
+    cp -f src/openocd.exe "${REPO_ROOT}/jtag_gdbserver.exe"
+    cp -f src/openocd.exe "${REPO_ROOT}/bin/jtag_gdbserver.exe"
 
-    echo ">>> Windows build complete: openocd.exe created successfully!"
+    echo ">>> Windows build complete: openocd.exe and jtag_gdbserver.exe created successfully!"
 }
 
 build_linux() {
@@ -167,9 +169,11 @@ build_linux() {
     mkdir -p "${REPO_ROOT}/bin"
     cp -f src/openocd "${REPO_ROOT}/openocd"
     cp -f src/openocd "${REPO_ROOT}/bin/openocd"
-    chmod +x "${REPO_ROOT}/openocd" "${REPO_ROOT}/bin/openocd"
+    cp -f src/openocd "${REPO_ROOT}/jtag_gdbserver"
+    cp -f src/openocd "${REPO_ROOT}/bin/jtag_gdbserver"
+    chmod +x "${REPO_ROOT}/openocd" "${REPO_ROOT}/bin/openocd" "${REPO_ROOT}/jtag_gdbserver" "${REPO_ROOT}/bin/jtag_gdbserver"
 
-    echo ">>> Linux build complete: openocd created successfully!"
+    echo ">>> Linux build complete: openocd and jtag_gdbserver created successfully!"
 }
 
 TARGET="${1:-all}"
@@ -207,9 +211,13 @@ echo "==================================================="
 if [ -f "${REPO_ROOT}/openocd.exe" ]; then
     echo " Windows: ${REPO_ROOT}/openocd.exe ($(du -h "${REPO_ROOT}/openocd.exe" | cut -f1))"
     echo "          ${REPO_ROOT}/bin/openocd.exe"
+    echo "          ${REPO_ROOT}/jtag_gdbserver.exe"
+    echo "          ${REPO_ROOT}/bin/jtag_gdbserver.exe"
 fi
 if [ -f "${REPO_ROOT}/openocd" ]; then
     echo " Linux:   ${REPO_ROOT}/openocd ($(du -h "${REPO_ROOT}/openocd" | cut -f1))"
     echo "          ${REPO_ROOT}/bin/openocd"
+    echo "          ${REPO_ROOT}/jtag_gdbserver"
+    echo "          ${REPO_ROOT}/bin/jtag_gdbserver"
 fi
 echo "==================================================="

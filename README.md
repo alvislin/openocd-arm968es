@@ -103,8 +103,8 @@ Convenience scripts are provided in the root directory:
 ```
 
 All built binaries are automatically copied to both the project root and `bin/` directory:
-- `openocd.exe` & `bin/openocd.exe` (Windows 64-bit standalone)
-- `openocd` & `bin/openocd` (Linux x86_64 standalone)
+- `openocd.exe` & `jtag_gdbserver.exe` / `bin/openocd.exe` & `bin/jtag_gdbserver.exe` (Windows 64-bit standalone)
+- `openocd` & `jtag_gdbserver` / `bin/openocd` & `bin/jtag_gdbserver` (Linux x86_64 standalone)
 
 ---
 
