@@ -283,11 +283,7 @@ int add_service(const struct service_driver *driver, const char *port,
 		c->sin.sin_family = AF_INET;
 
 		if (!bindto_name) {
-#ifdef _WIN32
-			c->sin.sin_addr.s_addr = htonl(INADDR_ANY);
-#else
 			c->sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-#endif
 		} else {
 			hp = gethostbyname(bindto_name);
 			if (!hp) {
