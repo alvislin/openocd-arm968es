@@ -266,8 +266,8 @@ int parse_cmdline_args(struct command_context *cmd_ctx, int argc, char *argv[])
 {
 	int jtag_clock_khz = 200;   /* Default 200 kHz */
 	int gdb_tcp_port = 3333;    /* Default GDB port 3333 */
-	int telnet_tcp_port = 4444; /* Default Telnet port 4444 */
-	int tcl_tcp_port = 6666;    /* Default TCL port 6666 */
+	int telnet_tcp_port = 0; /* Default disabled */
+	int tcl_tcp_port = 0;    /* Default disabled */
 
 	for (int i = 1; i < argc; i++) {
 		const char *arg = argv[i];
@@ -382,11 +382,17 @@ int parse_cmdline_args(struct command_context *cmd_ctx, int argc, char *argv[])
 	add_config_command(port_cmd);
 	free(port_cmd);
 
-	port_cmd = alloc_printf("telnet port %d", telnet_tcp_port);
+	if (telnet_tcp_port > 0)
+		port_cmd = alloc_printf("telnet port %d", telnet_tcp_port);
+	else
+		port_cmd = alloc_printf("telnet port disabled");
 	add_config_command(port_cmd);
 	free(port_cmd);
 
-	port_cmd = alloc_printf("tcl port %d", tcl_tcp_port);
+	if (tcl_tcp_port > 0)
+		port_cmd = alloc_printf("tcl port %d", tcl_tcp_port);
+	else
+		port_cmd = alloc_printf("tcl port disabled");
 	add_config_command(port_cmd);
 	free(port_cmd);
 

@@ -213,7 +213,9 @@ int add_service(const struct service_driver *driver, const char *port,
 {
 	struct service *c, **p;
 	struct hostent *hp;
+#ifndef _WIN32
 	int so_reuseaddr_option = 1;
+#endif
 
 	c = calloc(1, sizeof(*c));
 	if (!c) {
@@ -263,20 +265,30 @@ int add_service(const struct service_driver *driver, const char *port,
 			goto error;
 		}
 
+#ifndef _WIN32
+		/* On Windows, SO_REUSEADDR allows port hijacking and undefined routing.
+		 * Windows natively allows binding to a TIME_WAIT port without SO_REUSEADDR,
+		 * so omitting this option solves fast port reuse problems cleanly.
+		 */
 		setsockopt(c->fd,
 			SOL_SOCKET,
 			SO_REUSEADDR,
 			(void *)&so_reuseaddr_option,
 			sizeof(int));
+#endif
 
 		socket_nonblock(c->fd);
 
 		memset(&c->sin, 0, sizeof(c->sin));
 		c->sin.sin_family = AF_INET;
 
-		if (!bindto_name)
+		if (!bindto_name) {
+#ifdef _WIN32
+			c->sin.sin_addr.s_addr = htonl(INADDR_ANY);
+#else
 			c->sin.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		else {
+#endif
+		} else {
 			hp = gethostbyname(bindto_name);
 			if (!hp) {
 				LOG_ERROR("couldn't resolve bindto address: %s", bindto_name);
